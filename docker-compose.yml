@@ -1,0 +1,17 @@
+# Local dev convenience only — production uses Supabase-managed Postgres.
+# Run `docker compose up` to get a local Postgres for `prisma db push` / testing
+# without needing a Supabase project yet.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: qr_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - qr_analytics_db:/var/lib/postgresql/data
+
+volumes:
+  qr_analytics_db:

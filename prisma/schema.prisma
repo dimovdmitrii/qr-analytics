@@ -1,0 +1,114 @@
+// Prisma schema for QR Analytics SaaS
+// Data model per docs/SYSTEM_DESIGN.md section 3
+// Multi-tenancy strategy per docs/ADR-003-multi-tenancy.md (shared schema + tenant_id + RLS)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  owner
+  member
+  admin
+}
+
+enum QrStatus {
+  active
+  paused
+  archived
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("free")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users   User[]
+  qrCodes QrCode[]
+
+  @@map("tenants")
+}
+
+model User {
+  // id matches Supabase auth.users.id — this table mirrors/extends Supabase auth, it does not replace it
+  id        String   @id
+  tenantId  String?  @map("tenant_id")
+  email     String   @unique
+  role      Role     @default(owner)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+model QrCode {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  label     String
+  targetUrl String   @map("target_url")
+  shortCode String   @unique @map("short_code")
+  logoUrl   String?  @map("logo_url")
+  tags      String[] @default([])
+  status    QrStatus @default(active)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id])
+  scanEvents ScanEvent[]
+  dailyStats AnalyticsDaily[]
+
+  @@index([tenantId])
+  @@index([shortCode])
+  @@map("qr_codes")
+}
+
+model ScanEvent {
+  id        String   @id @default(uuid())
+  qrCodeId  String   @map("qr_code_id")
+  tenantId  String   @map("tenant_id") // denormalized for fast tenant-scoped queries + RLS
+  scannedAt DateTime @default(now()) @map("scanned_at")
+
+  // Privacy: raw IP is never stored, only a salted hash. See docs/SECURITY.md section 2.
+  ipHash  String? @map("ip_hash")
+  country String?
+  city    String?
+
+  deviceType String? @map("device_type")
+  browser    String?
+  os         String?
+  referrer   String?
+  isBot      Boolean @default(false) @map("is_bot")
+
+  qrCode QrCode @relation(fields: [qrCodeId], references: [id])
+
+  @@index([tenantId, scannedAt])
+  @@index([qrCodeId, scannedAt])
+  @@map("scan_events")
+}
+
+// Nightly rollup table so dashboards never GROUP BY the full scan_events history.
+// Populated by the aggregation job — see app/api/cron/aggregate-daily/route.ts
+model AnalyticsDaily {
+  id                    String   @id @default(uuid())
+  tenantId              String   @map("tenant_id")
+  qrCodeId              String   @map("qr_code_id")
+  day                   DateTime @db.Date
+  scanCount             Int      @default(0) @map("scan_count")
+  uniqueVisitorEstimate Int      @default(0) @map("unique_visitor_estimate")
+  topDevice             String?  @map("top_device")
+  topCountry            String?  @map("top_country")
+
+  qrCode QrCode @relation(fields: [qrCodeId], references: [id])
+
+  @@unique([qrCodeId, day])
+  @@index([tenantId, day])
+  @@map("analytics_daily")
+}
