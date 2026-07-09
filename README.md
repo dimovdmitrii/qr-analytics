@@ -1,5 +1,7 @@
 # QR Analytics — attribution dashboard for craft businesses
 
+**Live demo:** https://qr-analytics-seven.vercel.app
+
 A multi-tenant analytics layer for QR codes: track which company's QR code was
 scanned, by whom (device/location, not identity), and attribute the scan back
 to that company. Built as a companion tool to a physical QR-code plate
