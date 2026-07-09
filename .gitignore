@@ -43,3 +43,5 @@ next-env.d.ts
 
 # internal working notes (kept local, not part of the public repo)
 HANDOFF.md
+
+.vercel
